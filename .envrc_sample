@@ -1,0 +1,8 @@
+# Certificate Authority
+export ORGANIZATION="myorg"
+export ROOT_CA_PASSWORD="certPassword"
+export INT_CA_PASSWORD="certPassword"
+
+# Azure Resources
+export VAULT="test-vault"
+export HUB="test-hub"
