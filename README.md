@@ -36,10 +36,11 @@ Default Environment Settings
 
 ```
     Usage: ca                     # Creates new Root and Intermediate Certificate Authorities
-           hub                    # Loads and Validates Intermediate CA to the Iot Hub
-           edge     <deviceName>  # Creates a new edge device certificate
            device   <deviceName>  # Creates a new device certificate
+           edge     <deviceName>  # Creates a new edge device certificate
            leaf     <deviceName>  # Creates a new leaf device certificate
+           get      <deviceName>  # Retrieves a device certificate <deviceName> (optional)
+           hub                    # Loads and Validates Intermediate CA to the Iot Hub
            delete                 # Removes all local PKI Files
 ```
 

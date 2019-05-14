@@ -157,7 +157,7 @@ function save_vault()
 function generate_edge_certificate()
 {
   if [ $# -ne 1 ]; then
-    echo "Usage: <subjectName>"
+    echo "Usage: <deviceName>"
     exit 1
   fi
 
@@ -166,7 +166,7 @@ function generate_edge_certificate()
 
   ## Edge Devices have to have the Full Chain Certificates for Use
   openssl pkcs12 -inkey ./pki/private/${1}.key.pem \
-                 -in ./pki/certs/${1}-chain.cert.pem \
+                 -in ./pki/certs/${1}.cert.pem \
                  -chain -CAfile ./pki/certs/${ORGANIZATION}.chain.ca.cert.pem \
                  -password pass:${INT_CA_PASSWORD} \
                  -export -out ./pki/certs_pfx/${1}-chain.cert.pfx
@@ -196,7 +196,7 @@ function generate_device_certificate()
 function generate_leaf_certificate()
 {
   if [ $# -lt 1 ]; then
-    echo "Usage: <subjectName>"
+    echo "Usage: <deviceName>"
     exit 1
   fi
 
@@ -205,34 +205,70 @@ function generate_leaf_certificate()
   save_vault $1
 }
 
+function get_certificate()
+{
+  if [ ! -d $VAULT ]; then mkdir $VAULT; fi
+
+  printf "\n"
+  tput setaf 2; echo "Retrieving Requested Certificate" ; tput sgr0
+  tput setaf 3; echo "------------------------------------" ; tput sgr0
+
+  if [ $# -lt 1 ]; then
+    if [ -f cert/root-ca.pem ]; then rm $VAULT/root-ca.pem; fi
+    if [ -f cert/intermediate-ca.pem ]; then rm $VAULT/intermediate-ca.pem; fi
+
+    # Download Root CA Certificate
+    az keyvault certificate download --name ${ORGANIZATION}-root-ca --vault-name $VAULT --file $VAULT/root-ca.pem --encoding PEM
+    az keyvault certificate download --name ${ORGANIZATION}-intermediate-ca --vault-name $VAULT --file $VAULT/intermediate-ca.pem --encoding PEM
+  else
+
+    if [ -d $VAULT/$1 ]; then rm -rf $VAULT/$1; fi
+    mkdir $VAULT/$1
+
+    # Download and extract PEM files for Device
+    az keyvault secret download --name $1 --vault-name $VAULT --file $VAULT/$1/$1.pem --encoding base64
+    openssl pkcs12 -in $VAULT/$1/$1.pem -out $VAULT/$1/$1.cert.pem -nokeys -passin pass:
+    openssl pkcs12 -in $VAULT/$1/$1.pem -out $VAULT/$1/$1.key.pem -nodes -nocerts -passin pass:
+    openssl pkcs12 -export -in $VAULT/$1/$1.cert.pem -inkey $VAULT/$1/$1.key.pem -out $VAULT/$1/$1.pfx -password pass:$INT_CA_PASSWORD
+  fi
+}
+
 function clean_up() {
     # Remove the Private Key Folder
     printf "\n"
     tput setaf 2; echo "Removing Localhost Certificate Store" ; tput sgr0
     tput setaf 3; echo "------------------------------------" ; tput sgr0
-    rm -rf ./pki
+    if [ -d pki ]; then rm -rf pki; fi
+
+    printf "\n"
+    tput setaf 2; echo "Removing Downloaded Certificates" ; tput sgr0
+    tput setaf 3; echo "------------------------------------" ; tput sgr0
+    if [ -d $VAULT ]; then rm -rf $VAULT; fi
 }
 
 
 if [[ ${1} == "ca" ]]; then
     create_ca_certs
     archive_in_keyvault
-elif [[ ${1} == "hub" ]]; then
-    validate_to_hub
 elif [[ ${1} == "edge" ]]; then
     generate_edge_certificate ${2}
 elif [[ ${1} == "device" ]]; then
     generate_device_certificate ${2} ${3}
 elif [[ ${1} == "leaf" ]]; then
     generate_leaf_certificate ${2} ${3}
+elif [[ ${1} == "get" ]]; then
+    get_certificate ${2}
+elif [[ ${1} == "hub" ]]; then
+    validate_to_hub
 elif [[ ${1} == "delete" ]]; then
     clean_up
 else
     echo "Usage: ca                     # Creates new Root and Intermediate Certificate Authorities"
-    echo "       hub                    # Loads and Validates Intermediate CA to the Iot Hub"
-    echo "       edge     <deviceName>  # Creates a new edge device certificate"
     echo "       device   <deviceName>  # Creates a new device certificate"
+    echo "       edge     <deviceName>  # Creates a new edge device certificate"
     echo "       leaf     <deviceName>  # Creates a new leaf device certificate"
+    echo "       get      <deviceName>  # Retrieves device certificate <deviceName> (optional)"
+    echo "       hub                    # Loads and Validates Intermediate CA to the Iot Hub"
     echo "       delete                 # Removes all local PKI Files"
     exit 1
 fi
