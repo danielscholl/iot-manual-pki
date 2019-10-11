@@ -79,13 +79,65 @@ function archive_in_keyvault()
     -oyaml
 }
 
+function validate_to_dps()
+{
+    #######################################
+    ## Upload Intermediate CA to DPS     ##
+    #######################################
+    printf "\n"
+    tput setaf 2; echo "Uploading Intermediate CA Certificate to DPS" ; tput sgr0
+    tput setaf 3; echo "-----------------------------------------------" ; tput sgr0
+
+    # Upload the Certificates to DPS
+    az iot dps certificate create \
+      --name "${ORGANIZATION}-intermediate" \
+      --resource-group $DPS_GROUP \
+      --dps-name $DPS \
+      --path pki/certs/${ORGANIZATION}.intermediate.cert.pem \
+      -oyaml
+
+    # Retrieve the Certificate ETAG
+    ETAG=$(az iot dps certificate show \
+            --name "${ORGANIZATION}-intermediate" \
+            --resource-group $DPS_GROUP \
+            --dps-name $DPS \
+            --query etag -otsv)
+
+    # Generate a Verification Code for the Certificate
+    CODE=$(az iot dps certificate generate-verification-code \
+            --name "${ORGANIZATION}-intermediate" \
+            --dps-name $DPS \
+            --resource-group $DPS_GROUP \
+            --etag $ETAG \
+            --query properties.verificationCode -otsv)
+
+    # Generate a Verification Certificate signed by the Root CA to prove CA ownership
+    ./generate.sh verify-intermediate $CODE
+
+    # Retrieve the Certificate ETAG which changed when the Verification Code was generated
+    ETAG=$(az iot dps certificate show \
+            --name "${ORGANIZATION}-intermediate" \
+            --dps-name $DPS \
+            --resource-group $DPS_GROUP \
+            --query etag -otsv)
+
+    # Verify the CA Certificate with the Validation Certificate
+    az iot dps certificate verify \
+      --name "${ORGANIZATION}-intermediate" \
+      --dps-name $DPS \
+      --resource-group $DPS_GROUP \
+      --etag $ETAG \
+      --path pki/certs/${ORGANIZATION}-verify.cert.pem \
+      -oyaml
+}
+
 function validate_to_hub()
 {
     #######################################
     ## Upload Intermediate CA to IoT Hub ##
     #######################################
     printf "\n"
-    tput setaf 2; echo "Uploding Intermediate CA Certificate to IoT Hub" ; tput sgr0
+    tput setaf 2; echo "Uploading Intermediate CA Certificate to IoT Hub" ; tput sgr0
     tput setaf 3; echo "-----------------------------------------------" ; tput sgr0
 
     # Upload the Certificates to IoT Hub
@@ -141,6 +193,21 @@ function create_chain()
   echo "    ./pki/certs/$1-chain.cert.pem"
 }
 
+function create_edge_chain()
+{
+  printf "\n"
+  tput setaf 2; echo "Creating Edge Chain Certificate" ; tput sgr0
+  tput setaf 3; echo "-------------------------------" ; tput sgr0
+
+  # Concatinate the cert and pem to use as a chain
+  cat "./pki/certs/$1.ca.cert.pem" \
+    "./pki/certs/$ORGANIZATION.intermediate.cert.pem" \
+    "./pki/certs/$ORGANIZATION.root.ca.cert.pem" \
+    > "./pki/certs/$1.chain.ca.cert.pem"
+
+  echo "    ./pki/certs/$1.chain.ca.cert.pem"
+}
+
 function save_vault()
 {
   printf "\n"
@@ -162,14 +229,14 @@ function generate_edge_certificate()
   fi
 
   ./generate.sh edge $1
-  create_chain $1
+  create_edge_chain $1
 
   ## Edge Devices have to have the Full Chain Certificates for Use
-  openssl pkcs12 -inkey ./pki/private/${1}.key.pem \
-                 -in ./pki/certs/${1}.cert.pem \
+  openssl pkcs12 -inkey ./pki/private/${1}.ca.key.pem \
+                 -in ./pki/certs/${1}.ca.cert.pem \
                  -chain -CAfile ./pki/certs/${ORGANIZATION}.chain.ca.cert.pem \
                  -password pass:${INT_CA_PASSWORD} \
-                 -export -out ./pki/certs_pfx/${1}-chain.cert.pfx
+                 -export -out ./pki/certs_pfx/${1}.chain.ca.cert.pfx
 
   printf "\n"
   tput setaf 2; echo "Saving to Vault" ; tput sgr0
@@ -178,7 +245,11 @@ function generate_edge_certificate()
     --vault-name $VAULT \
     --name ${1} \
     --password ${INT_CA_PASSWORD} \
-    --file "./pki/certs_pfx/${1}-chain.cert.pfx" -oyaml
+    --file "./pki/certs_pfx/${1}.chain.ca.cert.pfx" -oyaml
+  az keyvault certificate import \
+    --vault-name $VAULT \
+    --name "${1}-identity" \
+    --file "./pki/certs_pfx/${1}.identity.cert.pfx" -oyaml
 }
 
 function generate_device_certificate()
@@ -260,6 +331,8 @@ elif [[ ${1} == "get" ]]; then
     get_certificate ${2}
 elif [[ ${1} == "hub" ]]; then
     validate_to_hub
+elif [[ ${1} == "dps" ]]; then
+    validate_to_dps
 elif [[ ${1} == "delete" ]]; then
     clean_up
 else
@@ -269,6 +342,7 @@ else
     echo "       leaf     <deviceName>  # Creates a new leaf device certificate"
     echo "       get      <deviceName>  # Retrieves device certificate <deviceName> (optional)"
     echo "       hub                    # Loads and Validates Intermediate CA to the Iot Hub"
+    echo "       dps                    # Loads and Validates Intermediate CA to DPS"
     echo "       delete                 # Removes all local PKI Files"
     exit 1
 fi

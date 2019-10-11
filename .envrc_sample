@@ -6,3 +6,5 @@ export INT_CA_PASSWORD="certPassword"
 # Azure Resources
 export VAULT="test-vault"
 export HUB="test-hub"
+export DPS_GROUP="test-group"
+export DPS="test-dps"

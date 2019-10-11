@@ -21,6 +21,7 @@ ca_chain_prefix="${ORGANIZATION}.chain.ca"
 
 algorithm="genrsa"
 key_bits_length="4096"
+non_csa_key_bits_length="2048"
 days_till_expire=360
 
 COUNTRY="US"
@@ -210,7 +211,7 @@ function generate_device_certificate_common()
     tput setaf 3; echo "--------------------------------------------" ; tput sgr0
     openssl ${algorithm} \
             -out ${certificate_dir}/private/${device_prefix}.key.pem \
-            ${key_bits_length}
+            ${non_ca_key_bits_length}
     [ $? -eq 0 ] || exit $?
     chmod 444 ${certificate_dir}/private/${device_prefix}.key.pem
     [ $? -eq 0 ] || exit $?
@@ -395,9 +396,10 @@ function generate_device_certificate()
                                        "Device"
 }
 
-###############################################################################
-# Generates a certificate for a Edge device, chained to the intermediate.
-###############################################################################
+
+################################################################################
+# Generates a certificate for an Edge server, chained to the device intermediate.
+################################################################################
 function generate_edge_device_certificate()
 {
     if [ $# -ne 1 ]; then
@@ -423,12 +425,48 @@ function generate_edge_device_certificate()
     # client certificate where the hostname is used as the common name
     # which essentially results in "loop" for validation purposes.
     generate_device_certificate_common "${1}.ca" \
-                                       ${device_prefix} \
+                                       "${device_prefix}.ca" \
                                        ${intermediate_ca_dir} \
                                        ${intermediate_ca_password} \
                                        ${openssl_intermediate_config_file} \
                                        "v3_intermediate_ca" \
-                                       "Edge Device"
+                                       "Edge CA"
+}
+
+################################################################################
+# Generates an identity certificate for an Edge, chained to the intermediate.
+################################################################################
+function generate_edge_identity_certificate()
+{
+    if [ $# -ne 1 ]; then
+      echo "Usage: <subjectName>"
+      exit 1
+    fi
+
+    local device_prefix="new-device"
+    if [ "$1" ]; then
+      device_prefix=$1
+    fi
+
+    rm -f ./pki/csr/${device_prefix}.csr.pem
+    rm -f ./pki/private/${device_prefix}.key.pem
+    rm -f ./pki/certs/${device_prefix}.cert.pem
+    rm -f ./pki/certs_pfx/${device_prefix}.cert.pfx
+    rm -f ./pki/certs/${device_prefix}.-full-chain.cert.pem
+    grep -v ${device_prefix} ./pki/index.txt > ./pki/index.txt.old && cp ./pki/index.txt.old ./pki/index.txt
+
+    # Note: Appending a '.ca' to the common name is useful in situations
+    # where a user names their hostname as the edge device name.
+    # By doing so we avoid TLS validation errors where we have a server or
+    # client certificate where the hostname is used as the common name
+    # which essentially results in "loop" for validation purposes.
+    generate_device_certificate_common "${1}" \
+                                       "${device_prefix}.identity" \
+                                       ${intermediate_ca_dir} \
+                                       ${intermediate_ca_password} \
+                                       ${openssl_intermediate_config_file} \
+                                       "usr_cert" \
+                                       "Edge Identity"
 }
 
 ###############################################################################
@@ -473,6 +511,7 @@ elif [ "${1}" == "device" ]; then
     generate_device_certificate "${2}"
 elif [ "${1}" == "edge" ]; then
     generate_edge_device_certificate "${2}"
+    generate_edge_identity_certificate "${2}"
 elif [ "${1}" == "leaf" ]; then
     generate_leaf_device_certificate "${2}"
 else

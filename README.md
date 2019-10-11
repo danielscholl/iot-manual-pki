@@ -40,7 +40,8 @@ Default Environment Settings
            edge     <deviceName>  # Creates a new edge device certificate
            leaf     <deviceName>  # Creates a new leaf device certificate
            get      <deviceName>  # Retrieves a device certificate <deviceName> (optional)
-           hub                    # Loads and Validates Intermediate CA to the Iot Hub
+           hub                    # Loads and Validates Intermediate CA to the IoT Hub
+           dps                    # Loads and Validates Intermediate CA to DPS
            delete                 # Removes all local PKI Files
 ```
 
