@@ -2,7 +2,7 @@
 
 The purpose of this solution is to be able to test x509 certificates and x509 certs signed by a CA without using a public signing authority.  It uses a heavily modified base script provided in the azure-iot-sdk
 
- using x509 certs signed by an Intermediate CA.  It uses the base script provided in the [azure-iot-sdk](https://github.com/Azure/azure-iot-sdk-c/blob/master/tools/CACertificates/CACertificateOverview.md) but heavily modified which is _not recommended_ to be used for production scenarios but is helpful for testing purposes. 
+ The purpose of this solution is to be able to test x509 certificates using x509 certs signed by an Intermediate CA.  It uses the base script provided in the [azure-iot-sdk](https://github.com/Azure/azure-iot-sdk-c/blob/master/tools/CACertificates/CACertificateOverview.md) but is heavily modified. This script is _not recommended_ to be used for production scenarios but is helpful for testing purposes. Certificates are configured to expire by default in the *.cnf files in 375 days.
 
  __PreRequisites__
 
@@ -25,7 +25,9 @@ Default Environment Settings
 | _ROOT_CA_PASSWORD_   | certPassword                         | Certificate Password for Root CA         |
 | _INT_CA_PASSWORD_    | certPassword                         | Certificate Password for Intermediate CA |
 | _VAULT_              | vault                                | Vault Name to store Certificates         |
-| _HUB_                | hub                                  | Hub Name to upload Certificate to        |
+| _HUB_                | test-hub                             | Hub Name to upload Certificate to        |
+| _DPS_GROUP_          | dps_group                            | DPS Group where DPS is located           |
+| _DPS_                | test-dps                             | DPS Name to upload Certificate to        |
 
 > The default ORGANIZATION name is `myorg`.  These files have the reference to the organization that can be renamed as necessary.
   - .envrc
